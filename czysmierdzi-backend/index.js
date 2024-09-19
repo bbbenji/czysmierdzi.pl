@@ -1,7 +1,13 @@
+// index.js
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-require("dotenv").config();
+const dotenv = require("dotenv");
+const http = require("http"); // Import HTTP module
+const { Server } = require("socket.io"); // Import Socket.IO
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -83,13 +89,35 @@ app.post("/api/submit", async (req, res) => {
   try {
     const newSubmission = new Submission({ status });
     await newSubmission.save();
+
+    // Emit the new submission to all connected clients
+    io.emit("newSubmission", newSubmission);
+
     res.status(201).json(newSubmission);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Start the server
-app.listen(PORT, () => {
+// Create HTTP server and initialize Socket.IO
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:5173", // Update this to your frontend's URL in production
+    methods: ["GET", "POST"],
+  },
+});
+
+// Handle Socket.IO connections
+io.on("connection", (socket) => {
+  console.log("A user connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
+
+// Start the server using the HTTP server
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
