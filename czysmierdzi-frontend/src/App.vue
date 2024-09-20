@@ -7,86 +7,100 @@
   </div>
 </template>
 
-<script>
+<script lang="ts" setup>
 import { ref, onMounted, onUnmounted } from "vue";
-import axios from "axios";
-import { io } from "socket.io-client";
+import axios, { AxiosResponse } from "axios";
+import { io, Socket } from "socket.io-client";
 import MainStatus from "./components/MainStatus.vue";
 import HistoryChart from "./components/HistoryChart.vue";
 import SubmitButtons from "./components/SubmitButtons.vue";
 
-export default {
-  components: {
-    MainStatus,
-    HistoryChart,
-    SubmitButtons,
-  },
-  setup() {
-    const latestStatus = ref("uncertain");
-    const history = ref([]);
+// Define the structure of a history item
+interface HistoryItem {
+  timestamp: string; // ISO date string or any parsable date string
+  status: "yes" | "no" | "uncertain";
+}
 
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// Define the structure of the latest status response
+interface LatestStatusResponse {
+  status: "yes" | "no" | "uncertain";
+}
 
-    // Initialize Socket.IO client
-    const socket = io(import.meta.env.VITE_API_BASE_URL.replace("/api", ""));
+// Define the structure of the history response
+type HistoryResponse = HistoryItem[];
 
-    const fetchLatestStatus = async () => {
-      try {
-        const res = await axios.get(`${API_BASE_URL}/latest`);
-        latestStatus.value = res.data.status || "uncertain";
-      } catch (err) {
-        console.error(err);
-        latestStatus.value = "uncertain";
-      }
-    };
+// Define the structure of a new submission event
+interface NewSubmissionEvent {
+  status: "yes" | "no" | "uncertain";
+  timestamp: string;
+}
 
-    const fetchHistory = async () => {
-      try {
-        const res = await axios.get(`${API_BASE_URL}/history`);
-        history.value = res.data;
-      } catch (err) {
-        console.error(err);
-        history.value = [];
-      }
-    };
+// Define the API base URL from environment variables
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
 
-    const handleSubmit = async (status) => {
-      try {
-        await axios.post(`${API_BASE_URL}/submit`, { status });
-        // No need to manually fetch data; real-time updates will handle it
-      } catch (err) {
-        console.error(err);
-      }
-    };
+// Reactive references
+const latestStatus = ref<"yes" | "no" | "uncertain">("uncertain");
+const history = ref<HistoryItem[]>([]);
 
-    // Handle incoming real-time submissions
-    const handleNewSubmission = (submission) => {
-      latestStatus.value = submission.status;
-      // Use Vue's reactivity to update the history array
-      history.value = [...history.value, submission];
-    };
+// Initialize Socket.IO client
+const socket: Socket = io(API_BASE_URL.replace("/api", ""));
 
-    onMounted(() => {
-      fetchLatestStatus();
-      fetchHistory();
-
-      // Listen for 'newSubmission' events
-      socket.on("newSubmission", handleNewSubmission);
-    });
-
-    onUnmounted(() => {
-      // Clean up the socket connection when component is unmounted
-      socket.off("newSubmission", handleNewSubmission);
-      socket.disconnect();
-    });
-
-    return {
-      latestStatus,
-      history,
-      handleSubmit,
-    };
-  },
+// Function to fetch the latest status from the API
+const fetchLatestStatus = async (): Promise<void> => {
+  try {
+    const res: AxiosResponse<LatestStatusResponse> = await axios.get(
+      `${API_BASE_URL}/latest`
+    );
+    latestStatus.value = res.data.status || "uncertain";
+  } catch (err) {
+    console.error("Error fetching latest status:", err);
+    latestStatus.value = "uncertain";
+  }
 };
+
+// Function to fetch the history from the API
+const fetchHistory = async (): Promise<void> => {
+  try {
+    const res: AxiosResponse<HistoryResponse> = await axios.get(
+      `${API_BASE_URL}/history`
+    );
+    history.value = res.data;
+  } catch (err) {
+    console.error("Error fetching history:", err);
+    history.value = [];
+  }
+};
+
+// Function to handle submission from SubmitButtons component
+const handleSubmit = async (status: "yes" | "no"): Promise<void> => {
+  try {
+    await axios.post(`${API_BASE_URL}/submit`, { status });
+    // No need to manually fetch data; real-time updates via Socket.IO will handle it
+  } catch (err) {
+    console.error("Error submitting status:", err);
+  }
+};
+
+// Function to handle new submissions received via Socket.IO
+const handleNewSubmission = (submission: NewSubmissionEvent): void => {
+  latestStatus.value = submission.status;
+  history.value = [...history.value, submission];
+};
+
+// Lifecycle hooks
+onMounted(() => {
+  fetchLatestStatus();
+  fetchHistory();
+
+  // Listen for 'newSubmission' events from the server
+  socket.on("newSubmission", handleNewSubmission);
+});
+
+onUnmounted(() => {
+  // Clean up the socket connection when the component is unmounted
+  socket.off("newSubmission", handleNewSubmission);
+  socket.disconnect();
+});
 </script>
 
 <style>

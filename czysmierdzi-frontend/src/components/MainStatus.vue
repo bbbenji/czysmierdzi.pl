@@ -6,32 +6,36 @@
   </div>
 </template>
 
-<script>
-export default {
-  props: {
-    status: {
-      type: String,
-      required: true,
-    },
-  },
-  computed: {
-    statusText() {
-      return this.status.charAt(0).toUpperCase() + this.status.slice(1);
-    },
-    statusClass() {
-      switch (this.status) {
-        case 'yes':
-          return 'text-green-500';
-        case 'no':
-          return 'text-red-500';
-        case 'uncertain':
-          return 'text-yellow-500';
-        default:
-          return 'text-gray-500';
-      }
-    },
-  },
-}
+<script lang="ts" setup>
+import { computed } from "vue";
+
+// Define the accepted status types
+type StatusType = "yes" | "no" | "uncertain" | string;
+
+// Define props with TypeScript
+const props = defineProps<{
+  status: StatusType;
+}>();
+
+// Computed property for formatted status text
+const statusText = computed(() => {
+  if (props.status.length === 0) return "";
+  return props.status.charAt(0).toUpperCase() + props.status.slice(1);
+});
+
+// Computed property for dynamic status class
+const statusClass = computed(() => {
+  switch (props.status) {
+    case "yes":
+      return "text-green-500";
+    case "no":
+      return "text-red-500";
+    case "uncertain":
+      return "text-yellow-500";
+    default:
+      return "text-gray-500";
+  }
+});
 </script>
 
 <style scoped>
