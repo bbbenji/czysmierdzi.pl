@@ -1,23 +1,22 @@
 <!-- src/components/SubmitButtons.vue -->
 <template>
   <div class="flex justify-center space-x-4 my-4">
-    <button @click="submit('yes')" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
-      Yes
-    </button>
-    <button @click="submit('no')" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
-      No
-    </button>
+    <Button @click="submit('yes')"> Yes </Button>
+    <Button variant="secondary" @click="submit('no')">No</Button>
   </div>
 </template>
 
-<script>
-export default {
-  emits: ['submit'],
-  methods: {
-    submit(status) {
-      this.$emit('submit', status)
-    },
-  },
+<script lang="ts" setup>
+import { Button } from "@/components/ui/button";
+
+// Define the emit event with TypeScript
+const emit = defineEmits<{
+  (e: "submit", status: "yes" | "no"): void;
+}>();
+
+// Method to emit the event
+function submit(status: "yes" | "no") {
+  emit("submit", status);
 }
 </script>
 
