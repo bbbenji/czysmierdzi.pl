@@ -1,4 +1,3 @@
-<!-- src/components/HistoryChart.vue -->
 <template>
   <div class="my-4">
     <LineChart :data="chartData" :options="chartOptions" />
@@ -6,8 +5,10 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch } from "vue";
-import { Line as LineChart } from "vue-chartjs"; // Alias Line as LineChart
+import { ref, onMounted, onUnmounted } from "vue";
+import axios, { AxiosResponse } from "axios";
+import { io, Socket } from "socket.io-client";
+import { Line as LineChart } from "vue-chartjs";
 import {
   Chart as ChartJS,
   Title,
@@ -32,16 +33,14 @@ ChartJS.register(
   PointElement
 );
 
-// Define the structure of a history item
+// Define the structure of a history item from the API
 interface HistoryItem {
   timestamp: string; // ISO date string or any parsable date string
   status: "yes" | "no" | "uncertain";
 }
 
-// Define component props with TypeScript
-const props = defineProps<{
-  history: HistoryItem[];
-}>();
+// Define the structure of the history response
+type HistoryResponse = HistoryItem[];
 
 // Define the chart data with proper typing
 const chartData = ref<ChartData<"line">>({
@@ -95,15 +94,25 @@ const chartOptions = ref<ChartOptions<"line">>({
   },
 });
 
-// Reference to the chart instance (optional, useful for direct manipulation)
-const chartRef = ref<InstanceType<typeof LineChart> | null>(null);
+// Fetch the history data from the API
+const fetchHistoryData = async (): Promise<void> => {
+  try {
+    const res: AxiosResponse<HistoryResponse> = await axios.get(
+      `${import.meta.env.VITE_API_BASE_URL}/history`
+    );
 
-// Function to update the chart data based on history prop
-const updateChart = () => {
-  const labels = props.history.map((item) =>
+    updateChartData(res.data);
+  } catch (err) {
+    console.error("Error fetching history data:", err);
+  }
+};
+
+// Function to update chart data
+const updateChartData = (history: HistoryItem[]) => {
+  const labels = history.map((item) =>
     new Date(item.timestamp).toLocaleString()
   );
-  const data = props.history.map((item) => {
+  const data = history.map((item) => {
     switch (item.status) {
       case "yes":
         return 1;
@@ -116,6 +125,7 @@ const updateChart = () => {
     }
   });
 
+  // Update chartData.value using new arrays to trigger reactivity
   chartData.value = {
     labels,
     datasets: [
@@ -134,14 +144,42 @@ const updateChart = () => {
   };
 };
 
-// Watch for changes in the history prop and update the chart accordingly
-watch(
-  () => props.history,
-  () => {
-    updateChart();
-  },
-  { immediate: true, deep: true }
+// Initialize Socket.IO client
+const socket: Socket = io(
+  import.meta.env.VITE_API_BASE_URL.replace("/api", "")
 );
+
+// Function to handle new submissions received via Socket.IO
+const handleNewSubmission = (submission: HistoryItem): void => {
+  const newLabel = new Date(submission.timestamp).toLocaleString();
+  const newData =
+    submission.status === "yes" ? 1 : submission.status === "no" ? -1 : 0;
+
+  // Create new arrays for reactivity to trigger in Vue
+  chartData.value = {
+    labels: [...chartData.value.labels!, newLabel],
+    datasets: [
+      {
+        ...chartData.value.datasets[0],
+        data: [...chartData.value.datasets[0].data!, newData],
+      },
+    ],
+  };
+};
+
+// Lifecycle hooks to manage data fetching and real-time updates
+onMounted(() => {
+  fetchHistoryData();
+
+  // Listen for 'newSubmission' events from the server
+  socket.on("newSubmission", handleNewSubmission);
+});
+
+onUnmounted(() => {
+  // Clean up the socket connection when the component is unmounted
+  socket.off("newSubmission", handleNewSubmission);
+  socket.disconnect();
+});
 </script>
 
 <style scoped>

@@ -70,9 +70,31 @@ app.get("/api/latest", async (req, res) => {
 });
 
 // Get history
+// Get history within a date range
 app.get("/api/history", async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  // Validate dates
+  const start = startDate ? new Date(startDate) : null;
+  const end = endDate ? new Date(endDate) : null;
+
+  if (start && isNaN(start.getTime())) {
+    return res.status(400).json({ error: "Invalid startDate" });
+  }
+
+  if (end && isNaN(end.getTime())) {
+    return res.status(400).json({ error: "Invalid endDate" });
+  }
+
   try {
-    const history = await Submission.find().sort({ timestamp: 1 });
+    const filter = {};
+    if (start || end) {
+      filter.timestamp = {};
+      if (start) filter.timestamp.$gte = start;
+      if (end) filter.timestamp.$lte = end;
+    }
+
+    const history = await Submission.find(filter).sort({ timestamp: 1 });
     res.json(history);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -94,6 +116,75 @@ app.post("/api/submit", async (req, res) => {
     io.emit("newSubmission", newSubmission);
 
     res.status(201).json(newSubmission);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get averages of 'yes' submissions within a date range
+app.get("/api/average", async (req, res) => {
+  const { startDate, endDate } = req.query;
+
+  // Validate dates
+  const start = startDate ? new Date(startDate) : null;
+  const end = endDate ? new Date(endDate) : null;
+
+  if (start && isNaN(start.getTime())) {
+    return res.status(400).json({ error: "Invalid startDate" });
+  }
+
+  if (end && isNaN(end.getTime())) {
+    return res.status(400).json({ error: "Invalid endDate" });
+  }
+
+  try {
+    const filter = {};
+    if (start || end) {
+      filter.timestamp = {};
+      if (start) filter.timestamp.$gte = start;
+      if (end) filter.timestamp.$lte = end;
+    }
+
+    const history = await Submission.aggregate([
+      {
+        $match: filter,
+      },
+      {
+        // Group submissions into 15-minute blocks
+        $group: {
+          _id: {
+            $toDate: {
+              $subtract: [
+                { $toLong: "$timestamp" },
+                { $mod: [{ $toLong: "$timestamp" }, 1000 * 60 * 1] },
+              ],
+            },
+          },
+          totalSubmissions: { $sum: 1 },
+          yesCount: { $sum: { $cond: [{ $eq: ["$status", "yes"] }, 1, 0] } },
+          noCount: { $sum: { $cond: [{ $eq: ["$status", "no"] }, 1, 0] } },
+        },
+      },
+      {
+        // Project the result to include the percentage of "yes" responses
+        $project: {
+          _id: 0,
+          timeBlock: "$_id",
+          yesPercentage: {
+            $multiply: [{ $divide: ["$yesCount", "$totalSubmissions"] }, 100],
+          },
+          totalSubmissions: 1,
+          yesCount: 1,
+          noCount: 1,
+        },
+      },
+      {
+        // Sort by the time block
+        $sort: { timeBlock: 1 },
+      },
+    ]);
+
+    res.json(history);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
