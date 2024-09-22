@@ -138,6 +138,7 @@ app.get("/api/average", async (req, res) => {
   }
 
   try {
+    // Build the filter based on provided dates
     const filter = {};
     if (start || end) {
       filter.timestamp = {};
@@ -145,6 +146,7 @@ app.get("/api/average", async (req, res) => {
       if (end) filter.timestamp.$lte = end;
     }
 
+    // Perform the aggregation to calculate averages
     const history = await Submission.aggregate([
       {
         $match: filter,
@@ -184,11 +186,69 @@ app.get("/api/average", async (req, res) => {
       },
     ]);
 
+    // If no data is found within the date range, fetch boundary data points
+    if (history.length === 0 && (start || end)) {
+      const boundaryData = [];
+
+      // Fetch the last submission before the startDate
+      if (start) {
+        const lastBefore = await Submission.findOne({
+          timestamp: { $lt: start },
+        })
+          .sort({ timestamp: -1 })
+          .exec();
+
+        if (lastBefore) {
+          boundaryData.push(formatSubmissionToAverage(lastBefore));
+        }
+      }
+
+      // Fetch the first submission after the endDate
+      if (end) {
+        const firstAfter = await Submission.findOne({ timestamp: { $gt: end } })
+          .sort({ timestamp: 1 })
+          .exec();
+
+        if (firstAfter) {
+          boundaryData.push(formatSubmissionToAverage(firstAfter));
+        }
+      }
+
+      // Return the boundary data if available
+      if (boundaryData.length > 0) {
+        return res.json(boundaryData);
+      }
+    }
+
+    // If data exists within the date range, return the aggregation result
     res.json(history);
   } catch (err) {
+    console.error("Error in /api/average:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
+// Helper function to format a single submission to match the aggregation output
+function formatSubmissionToAverage(submission) {
+  const timeBlock = alignTo15Minutes(submission.timestamp);
+
+  return {
+    timeBlock: timeBlock,
+    yesPercentage: submission.status === "yes" ? 100 : 0,
+    totalSubmissions: 1,
+    yesCount: submission.status === "yes" ? 1 : 0,
+    noCount: submission.status === "no" ? 1 : 0,
+  };
+}
+
+// Helper function to align a timestamp to the nearest 15-minute block
+function alignTo15Minutes(timestamp) {
+  const date = new Date(timestamp);
+  const minutes = date.getMinutes();
+  const alignedMinutes = Math.floor(minutes / 15) * 15;
+  date.setMinutes(alignedMinutes, 0, 0);
+  return date;
+}
 
 // Create HTTP server and initialize Socket.IO
 const server = http.createServer(app);

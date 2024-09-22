@@ -21,13 +21,15 @@ import {
   CategoryScale,
   LinearScale,
   PointElement,
+  TimeScale,
   ChartData,
   ChartOptions,
 } from "chart.js";
+import "chartjs-adapter-date-fns";
 
 import DatePicker from "./DatePicker.vue";
 
-// Register necessary Chart.js components
+// Register necessary Chart.js components, including TimeScale
 ChartJS.register(
   Title,
   Tooltip,
@@ -35,7 +37,8 @@ ChartJS.register(
   LineElement,
   CategoryScale,
   LinearScale,
-  PointElement
+  PointElement,
+  TimeScale
 );
 
 // Define the structure of the percentage item from the API
@@ -50,11 +53,10 @@ type PercentageResponse = PercentageItem[];
 
 // Define the chart data with proper typing
 const chartData = ref<ChartData<"line">>({
-  labels: [],
   datasets: [
     {
       label: "Yes Percentage",
-      data: [],
+      data: [], // Will be populated with {x, y} objects
       fill: false,
       borderColor: "rgba(75, 192, 192, 1)",
       tension: 0.4, // Smoothing between points
@@ -89,7 +91,15 @@ const chartOptions = ref<ChartOptions<"line">>({
       },
     },
     x: {
-      type: "category",
+      type: "time",
+      time: {
+        unit: "hour",
+        tooltipFormat: "PP",
+      },
+      title: {
+        display: true,
+        text: "Date",
+      },
       ticks: {
         autoSkip: true,
         maxTicksLimit: 10,
@@ -97,16 +107,6 @@ const chartOptions = ref<ChartOptions<"line">>({
     },
   },
 });
-
-// Function to interpolate between two data points
-const interpolate = (start: number, end: number, steps: number): number[] => {
-  const result: number[] = [];
-  const stepSize = (end - start) / steps;
-  for (let i = 1; i <= steps; i++) {
-    result.push(start + stepSize * i);
-  }
-  return result;
-};
 
 // Reactive state for selected date range
 const selectedDateRange = ref<{
@@ -133,64 +133,25 @@ const fetchPercentageData = async (): Promise<void> => {
       { params }
     );
 
-    const interpolatedData = interpolateChartData(res.data);
-    updateChartData(interpolatedData);
+    updateChartData(res.data);
   } catch (err) {
     console.error("Error fetching percentage data:", err);
   }
 };
 
-// Function to interpolate data between points
-const interpolateChartData = (data: PercentageItem[]): PercentageItem[] => {
-  const interpolatedData: PercentageItem[] = [];
-  for (let i = 0; i < data.length - 1; i++) {
-    interpolatedData.push(data[i]); // Add the original data point
-
-    // Add interpolated values between this point and the next one
-    const interpolatedValues = interpolate(
-      data[i].yesPercentage,
-      data[i + 1].yesPercentage,
-      5 // You can adjust this number to increase/decrease the number of interpolated points
-    );
-
-    interpolatedValues.forEach((value, index) => {
-      // Create a fake timeBlock for interpolated points (could use a midpoint or fractional timestamp)
-      const interpolatedTimeBlock = new Date(
-        new Date(data[i].timeBlock).getTime() +
-          ((new Date(data[i + 1].timeBlock).getTime() -
-            new Date(data[i].timeBlock).getTime()) /
-            (interpolatedValues.length + 1)) *
-            (index + 1)
-      ).toISOString();
-
-      interpolatedData.push({
-        timeBlock: interpolatedTimeBlock,
-        yesPercentage: value,
-        totalSubmissions: 0, // Set to 0 for interpolated values since they are not real data points
-      });
-    });
-  }
-
-  // Push the last data point without interpolation
-  if (data.length > 0) {
-    interpolatedData.push(data[data.length - 1]);
-  }
-
-  return interpolatedData;
-};
-
 // Function to update chart data
 const updateChartData = (data: PercentageItem[]) => {
-  const labels = data.map((item) => new Date(item.timeBlock).toLocaleString());
-  const percentages = data.map((item) => item.yesPercentage);
+  const formattedData = data.map((item) => ({
+    x: new Date(item.timeBlock),
+    y: item.yesPercentage,
+  }));
 
   // Update chartData.value using new arrays to trigger reactivity
   chartData.value = {
-    labels,
     datasets: [
       {
         label: "Yes Percentage",
-        data: percentages,
+        data: formattedData.map((item) => ({ x: item.x.getTime(), y: item.y })), // Convert Date to timestamp
         fill: false,
         borderColor: "rgba(75, 192, 192, 1)",
         tension: 0.4, // Smoothing between points
