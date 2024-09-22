@@ -1,11 +1,14 @@
 <template>
   <div class="my-4">
+    <div class="flex justify-end">
+      <DatePicker @update:dateRange="handleDateRangeUpdate" />
+    </div>
     <LineChart :data="chartData" :options="chartOptions" />
   </div>
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, watch } from "vue";
 import axios, { AxiosResponse } from "axios";
 import { io, Socket } from "socket.io-client";
 import { Line as LineChart } from "vue-chartjs";
@@ -21,6 +24,8 @@ import {
   ChartData,
   ChartOptions,
 } from "chart.js";
+
+import DatePicker from "./DatePicker.vue";
 
 // Register necessary Chart.js components
 ChartJS.register(
@@ -103,11 +108,29 @@ const interpolate = (start: number, end: number, steps: number): number[] => {
   return result;
 };
 
+// Reactive state for selected date range
+const selectedDateRange = ref<{
+  startDate: string | null;
+  endDate: string | null;
+}>({
+  startDate: null,
+  endDate: null,
+});
+
 // Fetch the percentage data from the API and update the chart
 const fetchPercentageData = async (): Promise<void> => {
   try {
+    const params: Record<string, string> = {};
+    if (selectedDateRange.value.startDate) {
+      params.startDate = selectedDateRange.value.startDate;
+    }
+    if (selectedDateRange.value.endDate) {
+      params.endDate = selectedDateRange.value.endDate;
+    }
+
     const res: AxiosResponse<PercentageResponse> = await axios.get(
-      `${import.meta.env.VITE_API_BASE_URL}/average`
+      `${import.meta.env.VITE_API_BASE_URL}/average`,
+      { params }
     );
 
     const interpolatedData = interpolateChartData(res.data);
@@ -149,7 +172,9 @@ const interpolateChartData = (data: PercentageItem[]): PercentageItem[] => {
   }
 
   // Push the last data point without interpolation
-  interpolatedData.push(data[data.length - 1]);
+  if (data.length > 0) {
+    interpolatedData.push(data[data.length - 1]);
+  }
 
   return interpolatedData;
 };
@@ -201,6 +226,21 @@ onUnmounted(() => {
   // Clean up the socket connection when the component is unmounted
   socket.off("newSubmission", handleNewSubmission);
   socket.disconnect();
+});
+
+// Handler for date range updates from DatePicker
+const handleDateRangeUpdate = (dateRange: {
+  startDate: string;
+  endDate: string;
+}) => {
+  selectedDateRange.value.startDate = dateRange.startDate;
+  selectedDateRange.value.endDate = dateRange.endDate;
+  fetchPercentageData();
+};
+
+// Optional: Watch for changes in selectedDateRange to refetch data
+watch(selectedDateRange, () => {
+  fetchPercentageData();
 });
 </script>
 

@@ -3,7 +3,6 @@
   <div class="container mx-auto p-4">
     <MainStatus :status="latestStatus" />
     <HistoryChart />
-    <DatePicker />
     <PercentageChart />
     <SubmitButtons @submit="handleSubmit" />
   </div>
@@ -16,30 +15,38 @@ import { io, Socket } from "socket.io-client";
 import MainStatus from "./components/MainStatus.vue";
 import HistoryChart from "./components/HistoryChart.vue";
 import PercentageChart from "./components/PercentageChart.vue";
-import DatePicker from "./components/DatePicker.vue";
 import SubmitButtons from "./components/SubmitButtons.vue";
 
-// Reactive reference for the latest status
-const latestStatus = ref<"yes" | "no" | "uncertain">("uncertain");
+// Define the possible status types
+type StatusType = "yes" | "no" | "uncertain";
 
-// Initialize Socket.IO client
+// Reactive reference for the latest status
+const latestStatus = ref<StatusType>("uncertain");
+
+// Initialize Socket.IO client with enhanced configurations
 const socket: Socket = io(
-  import.meta.env.VITE_API_BASE_URL.replace("/api", "")
+  import.meta.env.VITE_API_BASE_URL.replace("/api", ""),
+  {
+    transports: ["websocket"],
+    reconnectionAttempts: 5,
+    timeout: 10000,
+  }
 );
 
 // Function to handle submission from SubmitButtons component
-const handleSubmit = async (status: "yes" | "no"): Promise<void> => {
+const handleSubmit = async (status: StatusType): Promise<void> => {
   try {
     await axios.post(`${import.meta.env.VITE_API_BASE_URL}/submit`, { status });
-    // No need to manually fetch data; real-time updates via Socket.IO will handle it
-  } catch (err) {
-    console.error("Error submitting status:", err);
+    // Real-time updates via Socket.IO will handle updating latestStatus
+  } catch (error) {
+    console.error("Error submitting status:", error);
+    // Optionally, notify the user of the error
   }
 };
 
 // Function to handle new submissions received via Socket.IO
 const handleNewSubmission = (submission: {
-  status: "yes" | "no" | "uncertain";
+  status: StatusType;
   timestamp: string;
 }): void => {
   latestStatus.value = submission.status;

@@ -156,7 +156,7 @@ app.get("/api/average", async (req, res) => {
             $toDate: {
               $subtract: [
                 { $toLong: "$timestamp" },
-                { $mod: [{ $toLong: "$timestamp" }, 1000 * 60 * 1] },
+                { $mod: [{ $toLong: "$timestamp" }, 1000 * 60 * 15] }, // 15-minute intervals
               ],
             },
           },
