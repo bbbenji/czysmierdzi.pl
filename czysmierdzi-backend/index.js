@@ -104,22 +104,56 @@ app.post("/api/submit", async (req, res) => {
   }
 });
 
-/**
- * New Endpoint: Get Average Status in 15-Minute Windows
- * URL: /api/average
- * Method: GET
- * Description: Returns the average status for each 15-minute interval aligned to exact quarter hours.
- * Response Format:
- * [
- *   {
- *     windowStart: "2024-04-26T14:00:00.000Z",
- *     averageStatus: 5.6
- *   },
- *   ...
- * ]
- */
+// Get Average Status in 15-Minute Windows with Last Known Value for Missing Windows
 app.get("/api/average", async (req, res) => {
   try {
+    // Step 1: Determine the range of timestamps
+    const aggResult = await Submission.aggregate([
+      {
+        $group: {
+          _id: null,
+          minTimestamp: { $min: "$timestamp" },
+          maxTimestamp: { $max: "$timestamp" },
+        },
+      },
+    ]);
+
+    if (!aggResult || aggResult.length === 0) {
+      return res.json([]); // No data available
+    }
+
+    const { minTimestamp, maxTimestamp } = aggResult[0];
+
+    // Debugging Logs
+    console.log("Minimum Timestamp:", minTimestamp);
+    console.log("Maximum Timestamp:", maxTimestamp);
+
+    // Step 2: Generate all 15-minute windows within the range
+    const generateTimeBuckets = (start, end, intervalInMinutes) => {
+      const buckets = [];
+      const current = new Date(start);
+      current.setUTCSeconds(0, 0); // Align to the start of the minute
+
+      // Ensure the start time is aligned to the 15-minute interval
+      const minutes = current.getUTCMinutes();
+      const remainder = minutes % intervalInMinutes;
+      if (remainder !== 0) {
+        current.setUTCMinutes(minutes - remainder + intervalInMinutes);
+      }
+
+      while (current <= end) {
+        buckets.push(new Date(current));
+        current.setUTCMinutes(current.getUTCMinutes() + intervalInMinutes);
+      }
+      return buckets;
+    };
+
+    const allWindows = generateTimeBuckets(minTimestamp, maxTimestamp, 15);
+
+    // Debugging Logs
+    console.log("Generated Time Windows:", allWindows.length);
+
+    // Step 3: Aggregate actual average data
     const averages = await Submission.aggregate([
       {
         $group: {
@@ -144,7 +178,45 @@ app.get("/api/average", async (req, res) => {
       { $sort: { windowStart: 1 } },
     ]);
 
-    res.json(averages);
+    // Debugging Logs
+    console.log("Aggregated Averages:", averages.length);
+
+    // Step 4: Create a map for quick lookup
+    const averagesMap = new Map();
+    averages.forEach((item) => {
+      averagesMap.set(item.windowStart.getTime(), item.averageStatus);
+    });
+
+    // Step 5: Fill missing windows with the last known average
+    const filledAverages = [];
+    let lastKnownAverage = null;
+
+    allWindows.forEach((windowStart) => {
+      const timestamp = windowStart.getTime();
+      if (averagesMap.has(timestamp)) {
+        lastKnownAverage = averagesMap.get(timestamp);
+        filledAverages.push({
+          windowStart: windowStart.toISOString(),
+          averageStatus: lastKnownAverage,
+        });
+      } else if (lastKnownAverage !== null) {
+        filledAverages.push({
+          windowStart: windowStart.toISOString(),
+          averageStatus: lastKnownAverage,
+        });
+      } else {
+        // If there's no previous average, set it to null or a default value
+        filledAverages.push({
+          windowStart: windowStart.toISOString(),
+          averageStatus: null, // or some default value like 0
+        });
+      }
+    });
+
+    // Debugging Logs
+    console.log("Filled Averages:", filledAverages.length);
+
+    res.json(filledAverages);
   } catch (err) {
     console.error("Error fetching average data:", err);
     res.status(500).json({ error: err.message });

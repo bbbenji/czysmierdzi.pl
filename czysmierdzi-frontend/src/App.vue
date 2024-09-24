@@ -87,6 +87,7 @@ const fetchAverages = async (): Promise<void> => {
       `${API_BASE_URL}/average`
     );
     averages.value = res.data;
+    console.log(averages.value);
   } catch (err) {
     console.error("Error fetching average data:", err);
     averages.value = [];
