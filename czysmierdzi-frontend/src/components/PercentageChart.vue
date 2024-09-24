@@ -94,7 +94,7 @@ const chartOptions = ref<ChartOptions<"line">>({
       type: "time",
       time: {
         unit: "hour",
-        tooltipFormat: "PP",
+        tooltipFormat: "Pp",
       },
       title: {
         display: true,
@@ -102,7 +102,7 @@ const chartOptions = ref<ChartOptions<"line">>({
       },
       ticks: {
         autoSkip: true,
-        maxTicksLimit: 10,
+        maxTicksLimit: 24,
       },
     },
   },

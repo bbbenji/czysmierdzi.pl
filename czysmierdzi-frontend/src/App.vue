@@ -2,7 +2,7 @@
 <template>
   <div class="container mx-auto p-4">
     <MainStatus :status="latestStatus" />
-    <HistoryChart />
+    <!-- <HistoryChart /> -->
     <PercentageChart />
     <SubmitButtons @submit="handleSubmit" />
   </div>
@@ -13,7 +13,7 @@ import { ref, onMounted, onUnmounted } from "vue";
 import axios from "axios";
 import { io, Socket } from "socket.io-client";
 import MainStatus from "./components/MainStatus.vue";
-import HistoryChart from "./components/HistoryChart.vue";
+// import HistoryChart from "./components/HistoryChart.vue";
 import PercentageChart from "./components/PercentageChart.vue";
 import SubmitButtons from "./components/SubmitButtons.vue";
 

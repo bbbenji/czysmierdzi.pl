@@ -60,7 +60,7 @@ const emit = defineEmits<{
   ): void;
 }>();
 
-const df = new DateFormatter("en-US", {
+const df = new DateFormatter("pl-PL", {
   dateStyle: "medium",
 });
 
