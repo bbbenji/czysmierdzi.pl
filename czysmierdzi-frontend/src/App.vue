@@ -2,7 +2,8 @@
 <template>
   <div class="container mx-auto p-4">
     <MainStatus :status="latestStatus" />
-    <HistoryChart :history="history" />
+    <!-- <HistoryChart :history="history" /> -->
+    <AverageChart :averages="averages" />
     <SubmitButtons @submit="handleSubmit" />
   </div>
 </template>
@@ -12,26 +13,33 @@ import { ref, onMounted, onUnmounted } from "vue";
 import axios, { AxiosResponse } from "axios";
 import { io, Socket } from "socket.io-client";
 import MainStatus from "./components/MainStatus.vue";
-import HistoryChart from "./components/HistoryChart.vue";
+// import HistoryChart from "./components/HistoryChart.vue";
+import AverageChart from "./components/AverageChart.vue"; // Import the new AverageChart component
 import SubmitButtons from "./components/SubmitButtons.vue";
 
 // Define the structure of a history item
 interface HistoryItem {
   timestamp: string; // ISO date string or any parsable date string
-  status: "yes" | "no" | "uncertain";
+  status: number; // Numerical status between 0 and 10
 }
 
 // Define the structure of the latest status response
 interface LatestStatusResponse {
-  status: "yes" | "no" | "uncertain";
+  status: number; // Numerical status between 0 and 10
 }
 
 // Define the structure of the history response
 type HistoryResponse = HistoryItem[];
 
+// Define the structure of an average data item
+interface AverageItem {
+  windowStart: string; // ISO date string
+  averageStatus: number; // Average status value
+}
+
 // Define the structure of a new submission event
 interface NewSubmissionEvent {
-  status: "yes" | "no" | "uncertain";
+  status: number; // Numerical status between 0 and 10
   timestamp: string;
 }
 
@@ -39,8 +47,9 @@ interface NewSubmissionEvent {
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
 
 // Reactive references
-const latestStatus = ref<"yes" | "no" | "uncertain">("uncertain");
+const latestStatus = ref<number>(0);
 const history = ref<HistoryItem[]>([]);
+const averages = ref<AverageItem[]>([]); // New reactive reference for average data
 
 // Initialize Socket.IO client
 const socket: Socket = io(API_BASE_URL.replace("/api", ""));
@@ -51,10 +60,10 @@ const fetchLatestStatus = async (): Promise<void> => {
     const res: AxiosResponse<LatestStatusResponse> = await axios.get(
       `${API_BASE_URL}/latest`
     );
-    latestStatus.value = res.data.status || "uncertain";
+    latestStatus.value = res.data.status !== undefined ? res.data.status : 0;
   } catch (err) {
     console.error("Error fetching latest status:", err);
-    latestStatus.value = "uncertain";
+    latestStatus.value = 0;
   }
 };
 
@@ -71,8 +80,21 @@ const fetchHistory = async (): Promise<void> => {
   }
 };
 
+// Function to fetch the average data from the API
+const fetchAverages = async (): Promise<void> => {
+  try {
+    const res: AxiosResponse<AverageItem[]> = await axios.get(
+      `${API_BASE_URL}/average`
+    );
+    averages.value = res.data;
+  } catch (err) {
+    console.error("Error fetching average data:", err);
+    averages.value = [];
+  }
+};
+
 // Function to handle submission from SubmitButtons component
-const handleSubmit = async (status: "yes" | "no"): Promise<void> => {
+const handleSubmit = async (status: number): Promise<void> => {
   try {
     await axios.post(`${API_BASE_URL}/submit`, { status });
     // No need to manually fetch data; real-time updates via Socket.IO will handle it
@@ -85,12 +107,16 @@ const handleSubmit = async (status: "yes" | "no"): Promise<void> => {
 const handleNewSubmission = (submission: NewSubmissionEvent): void => {
   latestStatus.value = submission.status;
   history.value = [...history.value, submission];
+  // Optionally, update averages if the new submission falls within existing windows
+  // For simplicity, re-fetch averages
+  fetchAverages();
 };
 
 // Lifecycle hooks
 onMounted(() => {
   fetchLatestStatus();
   fetchHistory();
+  fetchAverages();
 
   // Listen for 'newSubmission' events from the server
   socket.on("newSubmission", handleNewSubmission);

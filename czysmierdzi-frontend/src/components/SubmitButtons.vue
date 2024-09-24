@@ -1,25 +1,28 @@
-<!-- src/components/SubmitButtons.vue -->
 <template>
-  <div class="flex justify-center space-x-4 my-4">
-    <Button @click="submit('yes')"> Yes </Button>
-    <Button variant="secondary" @click="submit('no')">No</Button>
+  <div class="flex justify-center flex-wrap gap-2 my-4">
+    <Button v-for="num in 11" :key="num - 1" @click="submit(num - 1)">
+      {{ num - 1 }}
+    </Button>
   </div>
 </template>
 
 <script lang="ts" setup>
+import { ref } from "vue";
 import { Button } from "@/components/ui/button";
 
-// Define the emit event with TypeScript
+// Define the emit event with TypeScript to accept numbers from 0 to 10
 const emit = defineEmits<{
-  (e: "submit", status: "yes" | "no"): void;
+  (e: "submit", status: number): void;
 }>();
 
+// Optional: Track the selected number for UI feedback
+const selected = ref<number | null>(null);
+
 // Method to emit the event
-function submit(status: "yes" | "no") {
+function submit(status: number) {
+  selected.value = status;
   emit("submit", status);
 }
 </script>
 
-<style scoped>
-/* Add any component-specific styles here */
-</style>
+<style scoped></style>

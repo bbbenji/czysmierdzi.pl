@@ -1,7 +1,7 @@
 <!-- src/components/HistoryChart.vue -->
 <template>
   <div class="my-4">
-    <LineChart :data="chartData" :options="chartOptions" />
+    <LineChart :data="chartData" :options="chartOptions" ref="chartRef" />
   </div>
 </template>
 
@@ -35,7 +35,7 @@ ChartJS.register(
 // Define the structure of a history item
 interface HistoryItem {
   timestamp: string; // ISO date string or any parsable date string
-  status: "yes" | "no" | "uncertain";
+  status: number; // Numerical status between 0 and 10
 }
 
 // Define component props with TypeScript
@@ -52,6 +52,7 @@ const chartData = ref<ChartData<"line">>({
       data: [],
       fill: false,
       borderColor: "rgba(75, 192, 192, 1)",
+      backgroundColor: "rgba(75, 192, 192, 0.2)",
       tension: 0.1,
       pointBackgroundColor: "rgba(75, 192, 192, 1)",
       pointBorderColor: "#fff",
@@ -72,17 +73,27 @@ const chartOptions = ref<ChartOptions<"line">>({
       display: true,
       text: "History of Smell Submissions",
     },
+    tooltip: {
+      callbacks: {
+        label: function (context) {
+          return `Status: ${context.parsed.y}`;
+        },
+      },
+    },
   },
   scales: {
     y: {
-      min: -1,
-      max: 1,
+      min: 0,
+      max: 10,
       ticks: {
+        stepSize: 1,
         callback: function (value: number | string) {
-          if (value === 1) return "Yes";
-          if (value === -1) return "No";
-          return "Uncertain";
+          return value;
         },
+      },
+      title: {
+        display: true,
+        text: "Status (0-10)",
       },
     },
     x: {
@@ -90,6 +101,10 @@ const chartOptions = ref<ChartOptions<"line">>({
       ticks: {
         autoSkip: true,
         maxTicksLimit: 10,
+      },
+      title: {
+        display: true,
+        text: "Timestamp",
       },
     },
   },
@@ -100,21 +115,36 @@ const chartRef = ref<InstanceType<typeof LineChart> | null>(null);
 
 // Function to update the chart data based on history prop
 const updateChart = () => {
-  const labels = props.history.map((item) =>
+  if (!props.history || props.history.length === 0) {
+    chartData.value = {
+      labels: [],
+      datasets: [
+        {
+          label: "Smell Status",
+          data: [],
+          fill: false,
+          borderColor: "rgba(75, 192, 192, 1)",
+          backgroundColor: "rgba(75, 192, 192, 0.2)",
+          tension: 0.1,
+          pointBackgroundColor: "rgba(75, 192, 192, 1)",
+          pointBorderColor: "#fff",
+          pointHoverBackgroundColor: "#fff",
+          pointHoverBorderColor: "rgba(75, 192, 192, 1)",
+        },
+      ],
+    };
+    return;
+  }
+
+  // Sort history by timestamp to ensure chronological order
+  const sortedHistory = [...props.history].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+
+  const labels = sortedHistory.map((item) =>
     new Date(item.timestamp).toLocaleString()
   );
-  const data = props.history.map((item) => {
-    switch (item.status) {
-      case "yes":
-        return 1;
-      case "no":
-        return -1;
-      case "uncertain":
-        return 0;
-      default:
-        return 0;
-    }
-  });
+  const data = sortedHistory.map((item) => item.status);
 
   chartData.value = {
     labels,
@@ -124,6 +154,7 @@ const updateChart = () => {
         data,
         fill: false,
         borderColor: "rgba(75, 192, 192, 1)",
+        backgroundColor: "rgba(75, 192, 192, 0.2)",
         tension: 0.1,
         pointBackgroundColor: "rgba(75, 192, 192, 1)",
         pointBorderColor: "#fff",

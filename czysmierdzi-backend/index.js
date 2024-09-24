@@ -45,8 +45,9 @@ process.on("SIGINT", async () => {
 // Define Submission Schema
 const submissionSchema = new mongoose.Schema({
   status: {
-    type: String,
-    enum: ["yes", "no", "uncertain"],
+    type: Number,
+    min: 0,
+    max: 10,
     required: true,
   },
   timestamp: {
@@ -82,8 +83,12 @@ app.get("/api/history", async (req, res) => {
 // Submit a new status
 app.post("/api/submit", async (req, res) => {
   const { status } = req.body;
-  if (!["yes", "no"].includes(status)) {
-    return res.status(400).json({ error: "Invalid status" });
+
+  // Validate that status is a number between 0 and 10
+  if (typeof status !== "number" || status < 0 || status > 10) {
+    return res
+      .status(400)
+      .json({ error: "Invalid status. Must be a number between 0 and 10." });
   }
 
   try {
@@ -95,6 +100,53 @@ app.post("/api/submit", async (req, res) => {
 
     res.status(201).json(newSubmission);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * New Endpoint: Get Average Status in 15-Minute Windows
+ * URL: /api/average
+ * Method: GET
+ * Description: Returns the average status for each 15-minute interval aligned to exact quarter hours.
+ * Response Format:
+ * [
+ *   {
+ *     windowStart: "2024-04-26T14:00:00.000Z",
+ *     averageStatus: 5.6
+ *   },
+ *   ...
+ * ]
+ */
+app.get("/api/average", async (req, res) => {
+  try {
+    const averages = await Submission.aggregate([
+      {
+        $group: {
+          _id: {
+            $dateTrunc: {
+              date: "$timestamp",
+              unit: "minute",
+              binSize: 15,
+              timezone: "UTC", // Adjust timezone if necessary
+            },
+          },
+          averageStatus: { $avg: "$status" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          windowStart: "$_id",
+          averageStatus: { $round: ["$averageStatus", 2] }, // Round to 2 decimal places
+        },
+      },
+      { $sort: { windowStart: 1 } },
+    ]);
+
+    res.json(averages);
+  } catch (err) {
+    console.error("Error fetching average data:", err);
     res.status(500).json({ error: err.message });
   }
 });
